@@ -24,7 +24,25 @@ import { emailService } from "../services/emailService";
 import { uploadService } from "../services/uploadService";
 import multer from "multer";
 import os from "os";
+import fs from "fs";
+import path from "path";
 import bcrypt from "bcryptjs";
+
+// Helper: convert a multer temp file to a base64 data URI and clean up the temp file
+function fileToBase64DataUri(filePath: string, originalName: string): string {
+  const extMap: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    bmp: "image/bmp", ico: "image/x-icon",
+  };
+  const ext = (originalName.split(".").pop() || "jpeg").toLowerCase();
+  const mime = extMap[ext] || "image/jpeg";
+  const data = fs.readFileSync(filePath);
+  const base64 = data.toString("base64");
+  // Clean up temp file
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  return `data:${mime};base64,${base64}`;
+}
 
 const router = Router();
 const upload = multer({ dest: os.tmpdir() });
@@ -883,7 +901,8 @@ router.post("/carousel", upload.single("image"), async (req: any, res: Response)
     const { title, subtitle, buttonLabel, buttonLink, displayOrder, isActive } = req.body;
     if (!req.file) return res.status(400).json({ message: "Slide image is required" });
 
-    const imageUrl = await uploadService.uploadFile(req.file.path, "carousel");
+    // Convert uploaded image to Base64 data URI for direct DB storage
+    const imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
     const slideRepo = AppDataSource.getRepository(CarouselSlide);
 
     const maxOrder = await slideRepo.maximum("displayOrder") || 0;
@@ -916,7 +935,8 @@ router.put("/carousel/:id", upload.single("image"), async (req: any, res: Respon
     if (buttonLink !== undefined) slide.buttonLink = buttonLink || null;
     if (displayOrder !== undefined) slide.displayOrder = parseInt(displayOrder);
     if (isActive !== undefined) slide.isActive = isActive === "true" || isActive === true;
-    if (req.file) slide.imageUrl = await uploadService.uploadFile(req.file.path, "carousel");
+    // If a new image is uploaded, convert it to Base64 data URI
+    if (req.file) slide.imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     await slideRepo.save(slide);
     return res.json({ message: "Carousel slide updated successfully", slide });
