@@ -337,7 +337,7 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
 router.post("/council", upload.single("photo"), async (req: any, res: Response) => {
   try {
     const { name, designation, institution, email, phone, year, memberType } = req.body;
-    let photoUrl = null;
+    let photoUrl: string | null = null;
     if (req.file) photoUrl = await uploadService.uploadFile(req.file.path, "executive_council");
 
     const councilRepo = AppDataSource.getRepository(ExecutiveCouncilMember);
@@ -486,8 +486,8 @@ router.post(
   async (req: any, res: Response) => {
     try {
       const { title, description, content } = req.body;
-      let imageUrl = null;
-      let attachmentUrl = null;
+      let imageUrl: string | null = null;
+      let attachmentUrl: string | null = null;
 
       if (req.files) {
         if (req.files.image) {
@@ -574,7 +574,7 @@ router.get("/events", async (req, res) => {
 router.post("/events", upload.single("banner"), async (req: any, res: Response) => {
   try {
     const { title, description, content, startDate, endDate, registrationDeadline, eventType, venueDetails, registrationLink, scheduleDetails } = req.body;
-    let bannerUrl = null;
+    let bannerUrl: string | null = null;
     if (req.file) bannerUrl = await uploadService.uploadFile(req.file.path, "events");
 
     const eventRepo = AppDataSource.getRepository(Event);
@@ -654,7 +654,7 @@ router.get("/gallery", async (req, res) => {
 router.post("/gallery/albums", upload.single("cover"), async (req: any, res: Response) => {
   try {
     const { name, description } = req.body;
-    let coverImageUrl = null;
+    let coverImageUrl: string | null = null;
     if (req.file) coverImageUrl = await uploadService.uploadFile(req.file.path, "gallery");
 
     const albumRepo = AppDataSource.getRepository(GalleryAlbum);
@@ -730,7 +730,7 @@ router.post("/achievements", upload.single("image"), async (req: any, res: Respo
     const { title, description, date, category } = req.body;
     if (!title || !description) return res.status(400).json({ message: "Title and description are required" });
 
-    let imageUrl = null;
+    let imageUrl: string | null = null;
     if (req.file) imageUrl = await uploadService.uploadFile(req.file.path, "achievements");
 
     const achRepo = AppDataSource.getRepository(Achievement);

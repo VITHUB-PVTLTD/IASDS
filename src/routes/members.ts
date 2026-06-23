@@ -158,7 +158,7 @@ router.post(
         return res.status(404).json({ message: "Member profile not found" });
       }
 
-      let receiptUrl = null;
+      let receiptUrl: string | null = null;
       if (req.file) {
         receiptUrl = await uploadService.uploadFile(req.file.path, "payment_receipts");
       }

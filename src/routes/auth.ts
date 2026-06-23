@@ -76,14 +76,14 @@ router.post(
       }
 
       // Upload profile photo
-      let profilePhotoUrl = null;
+      let profilePhotoUrl: string | null = null;
       if (req.files && req.files.profilePhoto) {
         const photoFile = req.files.profilePhoto[0];
         profilePhotoUrl = await uploadService.uploadFile(photoFile.path, "profile_photos");
       }
 
       // Upload supporting documents
-      let supportingDocsUrl = null;
+      let supportingDocsUrl: string | null = null;
       if (req.files && req.files.supportingDocument) {
         const docFile = req.files.supportingDocument[0];
         supportingDocsUrl = await uploadService.uploadFile(docFile.path, "supporting_documents");
