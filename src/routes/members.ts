@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
-import { authenticateJWT, AuthenticatedRequest } from "../middleware/authMiddleware";
+import { authenticateJWT } from "../middleware/authMiddleware";
+import type { AuthenticatedRequest } from "../middleware/authMiddleware";
 import { AppDataSource } from "../config/db";
 import { Member } from "../entities/Member";
 import { MemberProfile } from "../entities/MemberProfile";

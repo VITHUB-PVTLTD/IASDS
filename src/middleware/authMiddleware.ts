@@ -32,7 +32,7 @@ export function authenticateJWT(req: AuthenticatedRequest, res: Response, next: 
         role: decoded.role,
         memberId: decoded.memberId
       };
-      
+
       next();
     });
   } else {
