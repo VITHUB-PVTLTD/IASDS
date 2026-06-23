@@ -12,6 +12,22 @@ import { MembershipType } from "../entities/MembershipType";
 import { MembershipApplication } from "../entities/MembershipApplication";
 import { uploadService } from "../services/uploadService";
 import { emailService } from "../services/emailService";
+import fs from "fs";
+
+// Helper: convert a multer temp file to a base64 data URI and clean up the temp file
+function fileToBase64DataUri(filePath: string, originalName: string): string {
+  const extMap: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    bmp: "image/bmp", ico: "image/x-icon",
+  };
+  const ext = (originalName.split(".").pop() || "jpeg").toLowerCase();
+  const mime = extMap[ext] || "image/jpeg";
+  const data = fs.readFileSync(filePath);
+  const base64 = data.toString("base64");
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  return `data:${mime};base64,${base64}`;
+}
 
 const router = Router();
 const upload = multer({ dest: os.tmpdir() });
@@ -75,14 +91,14 @@ router.post(
         return res.status(400).json({ message: "Email is already registered" });
       }
 
-      // Upload profile photo
+      // Upload profile photo as base64 data URI
       let profilePhotoUrl: string | null = null;
       if (req.files && req.files.profilePhoto) {
         const photoFile = req.files.profilePhoto[0];
-        profilePhotoUrl = await uploadService.uploadFile(photoFile.path, "profile_photos");
+        profilePhotoUrl = fileToBase64DataUri(photoFile.path, photoFile.originalname || photoFile.filename);
       }
 
-      // Upload supporting documents
+      // Upload supporting documents (may be PDF - use uploadService)
       let supportingDocsUrl: string | null = null;
       if (req.files && req.files.supportingDocument) {
         const docFile = req.files.supportingDocument[0];

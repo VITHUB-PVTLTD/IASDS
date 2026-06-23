@@ -357,7 +357,7 @@ router.post("/council", upload.single("photo"), async (req: any, res: Response) 
   try {
     const { name, designation, institution, email, phone, year, memberType } = req.body;
     let photoUrl: string | null = null;
-    if (req.file) photoUrl = await uploadService.uploadFile(req.file.path, "executive_council");
+    if (req.file) photoUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     const councilRepo = AppDataSource.getRepository(ExecutiveCouncilMember);
     const maxOrder = await councilRepo.maximum("displayOrder") || 0;
@@ -395,7 +395,7 @@ router.put("/council/:id", upload.single("photo"), async (req: any, res: Respons
     if (year) council.year = year;
     if (displayOrder !== undefined) council.displayOrder = parseInt(displayOrder);
     if (memberType) council.memberType = memberType;
-    if (req.file) council.photoUrl = await uploadService.uploadFile(req.file.path, "executive_council");
+    if (req.file) council.photoUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     await councilRepo.save(council);
     return res.json({ message: "Council member updated successfully", council });
@@ -510,7 +510,8 @@ router.post(
 
       if (req.files) {
         if (req.files.image) {
-          imageUrl = await uploadService.uploadFile(req.files.image[0].path, "news");
+          const imgFile = req.files.image[0];
+          imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
         }
         if (req.files.attachment) {
           attachmentUrl = await uploadService.uploadFile(req.files.attachment[0].path, "news_attachments");
@@ -552,7 +553,8 @@ router.put(
 
       if (req.files) {
         if (req.files.image) {
-          news.imageUrl = await uploadService.uploadFile(req.files.image[0].path, "news");
+          const imgFile = req.files.image[0];
+          news.imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
         }
         if (req.files.attachment) {
           news.attachmentUrl = await uploadService.uploadFile(req.files.attachment[0].path, "news_attachments");
@@ -594,7 +596,7 @@ router.post("/events", upload.single("banner"), async (req: any, res: Response) 
   try {
     const { title, description, content, startDate, endDate, registrationDeadline, eventType, venueDetails, registrationLink, scheduleDetails } = req.body;
     let bannerUrl: string | null = null;
-    if (req.file) bannerUrl = await uploadService.uploadFile(req.file.path, "events");
+    if (req.file) bannerUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     const eventRepo = AppDataSource.getRepository(Event);
     const event = new Event();
@@ -635,7 +637,7 @@ router.put("/events/:id", upload.single("banner"), async (req: any, res: Respons
     if (eventType) event.eventType = eventType;
     if (venueDetails !== undefined) event.venueDetails = venueDetails;
     if (registrationLink !== undefined) event.registrationLink = registrationLink;
-    if (req.file) event.bannerUrl = await uploadService.uploadFile(req.file.path, "events");
+    if (req.file) event.bannerUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     await eventRepo.save(event);
     return res.json({ message: "Event updated successfully", event });
@@ -674,7 +676,7 @@ router.post("/gallery/albums", upload.single("cover"), async (req: any, res: Res
   try {
     const { name, description } = req.body;
     let coverImageUrl: string | null = null;
-    if (req.file) coverImageUrl = await uploadService.uploadFile(req.file.path, "gallery");
+    if (req.file) coverImageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     const albumRepo = AppDataSource.getRepository(GalleryAlbum);
     const album = new GalleryAlbum();
@@ -708,7 +710,7 @@ router.post("/gallery/albums/:id/photos", upload.single("photo"), async (req: an
     if (!album) return res.status(404).json({ message: "Album not found" });
     if (!req.file) return res.status(400).json({ message: "No photo file provided" });
 
-    const imageUrl = await uploadService.uploadFile(req.file.path, "gallery");
+    const imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
     const img = new GalleryImage();
     img.album = album;
     img.imageUrl = imageUrl;
@@ -750,7 +752,7 @@ router.post("/achievements", upload.single("image"), async (req: any, res: Respo
     if (!title || !description) return res.status(400).json({ message: "Title and description are required" });
 
     let imageUrl: string | null = null;
-    if (req.file) imageUrl = await uploadService.uploadFile(req.file.path, "achievements");
+    if (req.file) imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     const achRepo = AppDataSource.getRepository(Achievement);
     const achievement = new Achievement();
@@ -778,7 +780,7 @@ router.put("/achievements/:id", upload.single("image"), async (req: any, res: Re
     if (description) achievement.description = description;
     if (date !== undefined) achievement.date = date;
     if (category) achievement.category = category;
-    if (req.file) achievement.imageUrl = await uploadService.uploadFile(req.file.path, "achievements");
+    if (req.file) achievement.imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
 
     await achRepo.save(achievement);
     return res.json({ message: "Achievement updated successfully", achievement });

@@ -9,7 +9,23 @@ import { Notification } from "../entities/Notification";
 import { generateMembershipCardPdf } from "../services/pdfService";
 import multer from "multer";
 import os from "os";
+import fs from "fs";
 import { uploadService } from "../services/uploadService";
+
+// Helper: convert a multer temp file to a base64 data URI and clean up the temp file
+function fileToBase64DataUri(filePath: string, originalName: string): string {
+  const extMap: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    bmp: "image/bmp", ico: "image/x-icon",
+  };
+  const ext = (originalName.split(".").pop() || "jpeg").toLowerCase();
+  const mime = extMap[ext] || "image/jpeg";
+  const data = fs.readFileSync(filePath);
+  const base64 = data.toString("base64");
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  return `data:${mime};base64,${base64}`;
+}
 
 const router = Router();
 const upload = multer({ dest: os.tmpdir() });
@@ -127,7 +143,7 @@ router.post(
         return res.status(404).json({ message: "Member profile not found" });
       }
 
-      const profilePhotoUrl = await uploadService.uploadFile(req.file.path, "profile_photos");
+      const profilePhotoUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
       member.profile.profilePhotoUrl = profilePhotoUrl;
       await profileRepo.save(member.profile);
 
