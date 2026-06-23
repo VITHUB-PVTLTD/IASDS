@@ -14,6 +14,7 @@ const Achievement_1 = require("../entities/Achievement");
 const HonorsAwards_1 = require("../entities/HonorsAwards");
 const ContactMessage_1 = require("../entities/ContactMessage");
 const Member_1 = require("../entities/Member");
+const CarouselSlide_1 = require("../entities/CarouselSlide");
 const typeorm_1 = require("typeorm");
 const emailService_1 = require("../services/emailService");
 const router = (0, express_1.Router)();
@@ -34,14 +35,23 @@ router.get("/settings", async (req, res) => {
         return res.status(500).json({ message: "Failed to fetch settings", error: err.message });
     }
 });
-// 2. GET EXECUTIVE COUNCIL
+// 2. GET EXECUTIVE COUNCIL (grouped by member type)
 router.get("/council", async (req, res) => {
     try {
         const councilRepo = db_1.AppDataSource.getRepository(ExecutiveCouncilMember_1.ExecutiveCouncilMember);
         const members = await councilRepo.find({
-            order: { displayOrder: "ASC" }
+            order: { memberType: "ASC", displayOrder: "ASC" }
         });
-        return res.json(members);
+        const TYPES = [
+            "Executive Council",
+            "Executive Council Members",
+            "Advisory Council Members",
+        ];
+        const grouped = TYPES.map((type) => ({
+            type,
+            members: members.filter((m) => m.memberType === type),
+        }));
+        return res.json(grouped);
     }
     catch (err) {
         return res.status(500).json({ message: "Failed to fetch council members" });
@@ -265,6 +275,20 @@ router.get("/verify-member/:id", async (req, res) => {
     }
     catch (err) {
         return res.status(500).json({ verified: false, message: "Verification lookup failure." });
+    }
+});
+// 13. GET ACTIVE CAROUSEL SLIDES
+router.get("/carousel", async (req, res) => {
+    try {
+        const slideRepo = db_1.AppDataSource.getRepository(CarouselSlide_1.CarouselSlide);
+        const slides = await slideRepo.find({
+            where: { isActive: true },
+            order: { displayOrder: "ASC" }
+        });
+        return res.json(slides);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch carousel slides", error: err.message });
     }
 });
 exports.default = router;

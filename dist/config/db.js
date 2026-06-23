@@ -30,6 +30,7 @@ const EmailLog_1 = require("../entities/EmailLog");
 const WebsiteSetting_1 = require("../entities/WebsiteSetting");
 const SocialLink_1 = require("../entities/SocialLink");
 const AuditLog_1 = require("../entities/AuditLog");
+const CarouselSlide_1 = require("../entities/CarouselSlide");
 dotenv_1.default.config();
 const isProduction = process.env.NODE_ENV === "production";
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -38,8 +39,8 @@ exports.AppDataSource = new typeorm_1.DataSource({
     host: process.env.DATABASE_URL ? undefined : (process.env.DB_HOST || "localhost"),
     port: process.env.DATABASE_URL ? undefined : parseInt(process.env.DB_PORT || "5432"),
     username: process.env.DATABASE_URL ? undefined : (process.env.DB_USERNAME || "postgres"),
-    password: process.env.DATABASE_URL ? undefined : (process.env.DB_PASSWORD || "postgres"),
-    database: process.env.DATABASE_URL ? undefined : (process.env.DB_DATABASE || "iasds"),
+    password: process.env.DATABASE_URL ? undefined : (process.env.DB_PASSWORD || "Rakesh"),
+    database: process.env.DATABASE_URL ? undefined : (process.env.DB_DATABASE || "testing"),
     synchronize: !isProduction, // auto sync in dev, use migrations in production
     logging: !isProduction ? ["error", "warn"] : false,
     entities: [
@@ -66,7 +67,8 @@ exports.AppDataSource = new typeorm_1.DataSource({
         EmailLog_1.EmailLog,
         WebsiteSetting_1.WebsiteSetting,
         SocialLink_1.SocialLink,
-        AuditLog_1.AuditLog
+        AuditLog_1.AuditLog,
+        CarouselSlide_1.CarouselSlide
     ],
     subscribers: [],
     migrations: [],

@@ -56,7 +56,8 @@ exports.uploadService = {
         }
         const destinationPath = path_1.default.join(destinationDir, fileName);
         if (localPath !== destinationPath && fs_1.default.existsSync(localPath)) {
-            fs_1.default.renameSync(localPath, destinationPath);
+            fs_1.default.copyFileSync(localPath, destinationPath);
+            fs_1.default.unlinkSync(localPath);
         }
         const host = process.env.BACKEND_URL || "http://localhost:5000";
         return `${host}/uploads/${folder}/${fileName}`;

@@ -57,7 +57,7 @@ __decorate([
     __metadata("design:type", Object)
 ], ContactMessage.prototype, "adminReply", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "replied_at", nullable: true }),
+    (0, typeorm_1.Column)({ name: "replied_at", nullable: true, type: "timestamp" }),
     __metadata("design:type", Object)
 ], ContactMessage.prototype, "repliedAt", void 0);
 __decorate([

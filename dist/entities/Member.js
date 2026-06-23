@@ -42,7 +42,7 @@ __decorate([
     __metadata("design:type", User_1.User)
 ], Member.prototype, "user", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "membership_number", unique: true, nullable: true }),
+    (0, typeorm_1.Column)({ name: "membership_number", unique: true, nullable: true, type: "varchar" }),
     __metadata("design:type", Object)
 ], Member.prototype, "membershipNumber", void 0);
 __decorate([
@@ -55,11 +55,11 @@ __decorate([
     __metadata("design:type", String)
 ], Member.prototype, "status", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "joined_date", nullable: true }),
+    (0, typeorm_1.Column)({ name: "joined_date", nullable: true, type: "timestamp" }),
     __metadata("design:type", Object)
 ], Member.prototype, "joinedDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "expiry_date", nullable: true }),
+    (0, typeorm_1.Column)({ name: "expiry_date", nullable: true, type: "timestamp" }),
     __metadata("design:type", Object)
 ], Member.prototype, "expiryDate", void 0);
 __decorate([

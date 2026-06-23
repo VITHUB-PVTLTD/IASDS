@@ -21,6 +21,7 @@ let ExecutiveCouncilMember = class ExecutiveCouncilMember {
     phoneNumber;
     displayOrder;
     year;
+    memberType;
 };
 exports.ExecutiveCouncilMember = ExecutiveCouncilMember;
 __decorate([
@@ -59,6 +60,13 @@ __decorate([
     (0, typeorm_1.Column)({ default: "2026" }),
     __metadata("design:type", String)
 ], ExecutiveCouncilMember.prototype, "year", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        name: "member_type",
+        default: "Executive Council Members",
+    }),
+    __metadata("design:type", String)
+], ExecutiveCouncilMember.prototype, "memberType", void 0);
 exports.ExecutiveCouncilMember = ExecutiveCouncilMember = __decorate([
     (0, typeorm_1.Entity)("executive_council_members")
 ], ExecutiveCouncilMember);

@@ -45,7 +45,7 @@ __decorate([
     __metadata("design:type", String)
 ], MembershipPayment.prototype, "paymentMethod", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "transaction_reference", nullable: true }),
+    (0, typeorm_1.Column)({ name: "transaction_reference", nullable: true, type: "text" }),
     __metadata("design:type", Object)
 ], MembershipPayment.prototype, "transactionReference", void 0);
 __decorate([

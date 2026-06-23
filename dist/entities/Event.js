@@ -53,7 +53,7 @@ __decorate([
     __metadata("design:type", Date)
 ], Event.prototype, "endDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "registration_deadline", nullable: true }),
+    (0, typeorm_1.Column)({ name: "registration_deadline", nullable: true, type: "timestamp" }),
     __metadata("design:type", Object)
 ], Event.prototype, "registrationDeadline", void 0);
 __decorate([

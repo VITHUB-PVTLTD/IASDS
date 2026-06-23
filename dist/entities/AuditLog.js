@@ -27,7 +27,7 @@ __decorate([
     __metadata("design:type", String)
 ], AuditLog.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "user_id", nullable: true }),
+    (0, typeorm_1.Column)({ name: "user_id", nullable: true, type: "varchar" }),
     __metadata("design:type", Object)
 ], AuditLog.prototype, "userId", void 0);
 __decorate([
@@ -39,7 +39,7 @@ __decorate([
     __metadata("design:type", String)
 ], AuditLog.prototype, "entity", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "entity_id", nullable: true }),
+    (0, typeorm_1.Column)({ name: "entity_id", nullable: true, type: "varchar" }),
     __metadata("design:type", Object)
 ], AuditLog.prototype, "entityId", void 0);
 __decorate([
@@ -47,7 +47,7 @@ __decorate([
     __metadata("design:type", Object)
 ], AuditLog.prototype, "details", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "ip_address", nullable: true }),
+    (0, typeorm_1.Column)({ name: "ip_address", nullable: true, type: "varchar" }),
     __metadata("design:type", Object)
 ], AuditLog.prototype, "ipAddress", void 0);
 __decorate([

@@ -7,6 +7,7 @@ const db_1 = require("./config/db");
 const Role_1 = require("./entities/Role");
 const User_1 = require("./entities/User");
 const MembershipType_1 = require("./entities/MembershipType");
+const Member_1 = require("./entities/Member");
 const WebsiteSetting_1 = require("./entities/WebsiteSetting");
 const SocialLink_1 = require("./entities/SocialLink");
 const ExecutiveCouncilMember_1 = require("./entities/ExecutiveCouncilMember");
@@ -65,21 +66,53 @@ async function seed() {
         // 3. Seed Membership Types
         console.log("Seeding Membership Types...");
         const membershipTypes = [
-            { name: "Life Member", description: "Lifetime association membership benefits", durationMonths: 1200, feeAmount: 5000.0 },
-            { name: "Annual Member", description: "Standard annual membership benefits renewed yearly", durationMonths: 12, feeAmount: 1000.0 },
-            { name: "Student Member", description: "Discounted membership rate for active university students", durationMonths: 12, feeAmount: 300.0 },
+            { name: "Life Membership (Below 60 Years)", description: "Faculty Members, Professionals, Researchers, Industry Experts", durationMonths: 1200, feeAmount: 5000.0, currency: "INR" },
+            { name: "Life Membership (Above 60 Years)", description: "Senior Academicians, Retired Professionals, Researchers", durationMonths: 1200, feeAmount: 3000.0, currency: "INR" },
+            { name: "Annual Faculty Membership", description: "Faculty Members of Universities, Colleges, and Institutions", durationMonths: 12, feeAmount: 500.0, currency: "INR" },
+            { name: "Annual Research Scholar Membership", description: "Ph.D., M.Phil., and Research Scholars", durationMonths: 12, feeAmount: 300.0, currency: "INR" },
+            { name: "Student Membership", description: "Undergraduate and Postgraduate Students", durationMonths: 12, feeAmount: 50.0, currency: "INR" },
+            { name: "Institutional Life Membership", description: "Universities, Colleges, Research Institutions, Industries, Organizations", durationMonths: 1200, feeAmount: 30000.0, currency: "INR" },
+            { name: "Institutional Annual Membership", description: "Educational Institutions, Research Centres, Industries, Organizations", durationMonths: 12, feeAmount: 3000.0, currency: "INR" },
+            { name: "International Life Membership (Below 60 Years)", description: "Foreign Academicians, Researchers, Professionals", durationMonths: 1200, feeAmount: 100.0, currency: "USD" },
+            { name: "International Life Membership (Above 60 Years)", description: "Senior Foreign Academicians and Researchers", durationMonths: 1200, feeAmount: 50.0, currency: "USD" },
         ];
+        const typeMap = {};
         for (const mt of membershipTypes) {
             let type = await typeRepo.findOneBy({ name: mt.name });
             if (!type) {
                 type = new MembershipType_1.MembershipType();
-                type.name = mt.name;
-                type.description = mt.description;
-                type.durationMonths = mt.durationMonths;
-                type.feeAmount = mt.feeAmount;
-                type.currency = "INR";
-                await typeRepo.save(type);
-                console.log(`Created Membership Type: ${mt.name}`);
+            }
+            type.name = mt.name;
+            type.description = mt.description;
+            type.durationMonths = mt.durationMonths;
+            type.feeAmount = mt.feeAmount;
+            type.currency = mt.currency;
+            type = await typeRepo.save(type);
+            typeMap[mt.name] = type;
+            console.log(`Saved Membership Type: ${mt.name}`);
+        }
+        // Re-assign members and clean up old obsolete types
+        const memberRepo = db_1.AppDataSource.getRepository(Member_1.Member);
+        const reassignments = [
+            { oldName: "Life Member", newName: "Life Membership (Below 60 Years)" },
+            { oldName: "Annual Member", newName: "Annual Faculty Membership" },
+            { oldName: "Student Member", newName: "Student Membership" }
+        ];
+        for (const r of reassignments) {
+            try {
+                const oldType = await typeRepo.findOneBy({ name: r.oldName });
+                if (oldType) {
+                    const newType = typeMap[r.newName];
+                    if (newType) {
+                        await memberRepo.update({ membershipType: { id: oldType.id } }, { membershipType: newType });
+                        console.log(`Reassigned members from '${r.oldName}' to '${r.newName}'`);
+                    }
+                    await typeRepo.delete({ id: oldType.id });
+                    console.log(`Deleted obsolete membership type: '${r.oldName}'`);
+                }
+            }
+            catch (err) {
+                console.log(`Failed to clean up obsolete type '${r.oldName}':`, err);
             }
         }
         // 4. Seed Website Settings

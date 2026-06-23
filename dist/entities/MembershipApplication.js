@@ -41,11 +41,11 @@ __decorate([
     __metadata("design:type", Object)
 ], MembershipApplication.prototype, "reviewerNotes", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "reviewed_by", nullable: true }),
+    (0, typeorm_1.Column)({ name: "reviewed_by", nullable: true, type: "varchar" }),
     __metadata("design:type", Object)
 ], MembershipApplication.prototype, "reviewedBy", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "reviewed_at", nullable: true }),
+    (0, typeorm_1.Column)({ name: "reviewed_at", nullable: true, type: "timestamp" }),
     __metadata("design:type", Object)
 ], MembershipApplication.prototype, "reviewedAt", void 0);
 __decorate([

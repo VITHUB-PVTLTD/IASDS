@@ -7,6 +7,7 @@ const express_1 = require("express");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const db_1 = require("../config/db");
 const User_1 = require("../entities/User");
+const Role_1 = require("../entities/Role");
 const Member_1 = require("../entities/Member");
 const MembershipApplication_1 = require("../entities/MembershipApplication");
 const ExecutiveCouncilMember_1 = require("../entities/ExecutiveCouncilMember");
@@ -16,19 +17,24 @@ const News_1 = require("../entities/News");
 const Event_1 = require("../entities/Event");
 const GalleryAlbum_1 = require("../entities/GalleryAlbum");
 const GalleryImage_1 = require("../entities/GalleryImage");
+const Achievement_1 = require("../entities/Achievement");
 const ContactMessage_1 = require("../entities/ContactMessage");
 const WebsiteSetting_1 = require("../entities/WebsiteSetting");
 const Notification_1 = require("../entities/Notification");
+const CarouselSlide_1 = require("../entities/CarouselSlide");
 const emailService_1 = require("../services/emailService");
 const uploadService_1 = require("../services/uploadService");
 const multer_1 = __importDefault(require("multer"));
 const os_1 = __importDefault(require("os"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const router = (0, express_1.Router)();
 const upload = (0, multer_1.default)({ dest: os_1.default.tmpdir() });
 // Restrict all routes in this file to administrators/editors
 router.use(authMiddleware_1.authenticateJWT);
 router.use((0, authMiddleware_1.requireRole)(["Super Admin", "Admin", "Editor"]));
-// 1. GET ADMIN DASHBOARD STATS
+// ============================================================
+// 1. DASHBOARD STATS
+// ============================================================
 router.get("/stats", async (req, res) => {
     try {
         const userRepo = db_1.AppDataSource.getRepository(User_1.User);
@@ -36,15 +42,29 @@ router.get("/stats", async (req, res) => {
         const pubRepo = db_1.AppDataSource.getRepository(Publication_1.Publication);
         const contactRepo = db_1.AppDataSource.getRepository(ContactMessage_1.ContactMessage);
         const appRepo = db_1.AppDataSource.getRepository(MembershipApplication_1.MembershipApplication);
+        const newsRepo = db_1.AppDataSource.getRepository(News_1.News);
+        const eventRepo = db_1.AppDataSource.getRepository(Event_1.Event);
+        const achRepo = db_1.AppDataSource.getRepository(Achievement_1.Achievement);
         const totalUsers = await userRepo.count();
         const approvedMembers = await memberRepo.countBy({ status: "approved" });
         const pendingMembers = await memberRepo.countBy({ status: "pending_review" });
+        const rejectedMembers = await memberRepo.countBy({ status: "rejected" });
         const downloadsSum = await pubRepo.createQueryBuilder("pub")
             .select("SUM(pub.downloadCount)", "sum")
             .getRawOne();
+        const totalPublications = await pubRepo.count();
         const unreadMessages = await contactRepo.countBy({ status: "unread" });
+        const totalMessages = await contactRepo.count();
+        const totalNews = await newsRepo.count();
+        const totalEvents = await eventRepo.count();
+        const totalAchievements = await achRepo.count();
         const recentApplications = await appRepo.find({
             order: { submittedAt: "DESC" },
+            take: 5
+        });
+        const recentMembers = await memberRepo.find({
+            relations: ["profile", "user"],
+            order: { createdAt: "DESC" },
             take: 5
         });
         return res.json({
@@ -52,17 +72,26 @@ router.get("/stats", async (req, res) => {
                 totalUsers,
                 approvedMembers,
                 pendingMembers,
+                rejectedMembers,
                 totalDownloads: parseInt(downloadsSum?.sum || "0"),
-                unreadMessages
+                totalPublications,
+                unreadMessages,
+                totalMessages,
+                totalNews,
+                totalEvents,
+                totalAchievements
             },
-            recentApplications
+            recentApplications,
+            recentMembers
         });
     }
     catch (err) {
         return res.status(500).json({ message: "Failed to fetch admin statistics", error: err.message });
     }
 });
-// 2. GET & REVIEW MEMBERSHIP APPLICATIONS
+// ============================================================
+// 2. MEMBERSHIP APPLICATIONS
+// ============================================================
 router.get("/applications", async (req, res) => {
     try {
         const memberRepo = db_1.AppDataSource.getRepository(Member_1.Member);
@@ -81,7 +110,7 @@ router.post("/applications/:id/review", async (req, res) => {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-        const { action, reviewerNotes } = req.body; // 'approve' or 'reject'
+        const { action, reviewerNotes } = req.body;
         const memberRepo = queryRunner.manager.getRepository(Member_1.Member);
         const userRepo = queryRunner.manager.getRepository(User_1.User);
         const appRepo = queryRunner.manager.getRepository(MembershipApplication_1.MembershipApplication);
@@ -90,26 +119,21 @@ router.post("/applications/:id/review", async (req, res) => {
             where: { id: req.params.id },
             relations: ["profile", "membershipType", "user"]
         });
-        if (!member) {
+        if (!member)
             return res.status(404).json({ message: "Member record not found" });
-        }
         const application = await appRepo.findOneBy({ user: { id: member.user.id }, status: "pending" });
         if (action === "approve") {
             member.status = "approved";
             member.joinedDate = new Date();
-            // Calculate expiry date based on membership type duration
             const durationMonths = member.membershipType?.durationMonths || 12;
             const expiry = new Date();
             expiry.setMonth(expiry.getMonth() + durationMonths);
             member.expiryDate = expiry;
-            // Generate sequential membership number (e.g. IASDS-2026-0012)
             const approvedCount = await memberRepo.countBy({ status: "approved" });
             const seqStr = String(approvedCount + 1).padStart(4, "0");
             const currentYear = new Date().getFullYear();
             member.membershipNumber = `IASDS-${currentYear}-${seqStr}`;
-            // Save Member
             await queryRunner.manager.save(member);
-            // Update Application status
             if (application) {
                 application.status = "approved";
                 application.reviewedBy = req.user?.id || null;
@@ -117,14 +141,12 @@ router.post("/applications/:id/review", async (req, res) => {
                 application.reviewerNotes = reviewerNotes || "Approved by admin";
                 await queryRunner.manager.save(application);
             }
-            // Create Notification
             const notif = new Notification_1.Notification();
             notif.user = member.user;
             notif.title = "Membership Approved!";
-            notif.message = `Congratulations, your membership request has been approved. Your ID is ${member.membershipNumber}. You can now download your digital membership card.`;
+            notif.message = `Congratulations, your membership request has been approved. Your ID is ${member.membershipNumber}.`;
             await queryRunner.manager.save(notif);
             await queryRunner.commitTransaction();
-            // Send approved email notification
             await emailService_1.emailService.sendRegistrationApproved(member.user.email, member.profile.fullName, member.membershipNumber);
             return res.json({ message: "Member application approved successfully", membershipNumber: member.membershipNumber });
         }
@@ -144,7 +166,6 @@ router.post("/applications/:id/review", async (req, res) => {
             notif.message = `We regret to inform you that your application was rejected. Reason: ${reviewerNotes || "N/A"}`;
             await queryRunner.manager.save(notif);
             await queryRunner.commitTransaction();
-            // Send rejection email notification
             await emailService_1.emailService.sendRegistrationRejected(member.user.email, member.profile.fullName, reviewerNotes || "Does not meet requirements.");
             return res.json({ message: "Member application rejected successfully" });
         }
@@ -152,23 +173,152 @@ router.post("/applications/:id/review", async (req, res) => {
     }
     catch (err) {
         await queryRunner.rollbackTransaction();
-        console.error("Error reviewing application:", err);
         return res.status(500).json({ message: "Review process failed", error: err.message });
     }
     finally {
         await queryRunner.release();
     }
 });
-// 3. EXECUTIVE COUNCIL CRUD & REORDER
+// ============================================================
+// 3. MEMBER MANAGEMENT
+// ============================================================
+router.get("/members", async (req, res) => {
+    try {
+        const memberRepo = db_1.AppDataSource.getRepository(Member_1.Member);
+        const list = await memberRepo.find({
+            relations: ["profile", "membershipType", "user"],
+            order: { createdAt: "DESC" }
+        });
+        return res.json(list);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch members", error: err.message });
+    }
+});
+router.get("/members/:id", async (req, res) => {
+    try {
+        const memberRepo = db_1.AppDataSource.getRepository(Member_1.Member);
+        const member = await memberRepo.findOne({
+            where: { id: req.params.id },
+            relations: ["profile", "membershipType", "user"]
+        });
+        if (!member)
+            return res.status(404).json({ message: "Member not found" });
+        return res.json(member);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch member", error: err.message });
+    }
+});
+router.put("/members/:id/status", async (req, res) => {
+    try {
+        const { status } = req.body; // 'approved', 'suspended', 'pending_review', 'rejected'
+        const memberRepo = db_1.AppDataSource.getRepository(Member_1.Member);
+        const member = await memberRepo.findOneBy({ id: req.params.id });
+        if (!member)
+            return res.status(404).json({ message: "Member not found" });
+        member.status = status;
+        await memberRepo.save(member);
+        return res.json({ message: "Member status updated successfully", member });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to update member status", error: err.message });
+    }
+});
+// ============================================================
+// 4. USER MANAGEMENT
+// ============================================================
+router.get("/users", async (req, res) => {
+    try {
+        const userRepo = db_1.AppDataSource.getRepository(User_1.User);
+        const users = await userRepo.find({
+            relations: ["role"],
+            order: { createdAt: "DESC" }
+        });
+        // Strip password hashes
+        const safe = users.map(u => ({
+            id: u.id,
+            email: u.email,
+            role: u.role,
+            status: u.status,
+            createdAt: u.createdAt
+        }));
+        return res.json(safe);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch users", error: err.message });
+    }
+});
+router.put("/users/:id/role", async (req, res) => {
+    try {
+        const { roleName } = req.body;
+        const userRepo = db_1.AppDataSource.getRepository(User_1.User);
+        const roleRepo = db_1.AppDataSource.getRepository(Role_1.Role);
+        const user = await userRepo.findOne({ where: { id: req.params.id }, relations: ["role"] });
+        if (!user)
+            return res.status(404).json({ message: "User not found" });
+        const role = await roleRepo.findOneBy({ name: roleName });
+        if (!role)
+            return res.status(400).json({ message: "Invalid role specified" });
+        user.role = role;
+        await userRepo.save(user);
+        return res.json({ message: "User role updated successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to update user role", error: err.message });
+    }
+});
+router.put("/users/:id/status", async (req, res) => {
+    try {
+        const { status } = req.body; // 'active', 'suspended'
+        const userRepo = db_1.AppDataSource.getRepository(User_1.User);
+        const user = await userRepo.findOneBy({ id: req.params.id });
+        if (!user)
+            return res.status(404).json({ message: "User not found" });
+        user.status = status;
+        await userRepo.save(user);
+        return res.json({ message: "User status updated successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to update user status", error: err.message });
+    }
+});
+router.post("/users", async (req, res) => {
+    try {
+        const { email, password, roleName } = req.body;
+        if (!email || !password || !roleName) {
+            return res.status(400).json({ message: "Email, password and role are required" });
+        }
+        const userRepo = db_1.AppDataSource.getRepository(User_1.User);
+        const roleRepo = db_1.AppDataSource.getRepository(Role_1.Role);
+        const existing = await userRepo.findOneBy({ email });
+        if (existing)
+            return res.status(400).json({ message: "Email already registered" });
+        const role = await roleRepo.findOneBy({ name: roleName });
+        if (!role)
+            return res.status(400).json({ message: "Invalid role specified" });
+        const user = new User_1.User();
+        user.email = email;
+        user.passwordHash = await bcryptjs_1.default.hash(password, 10);
+        user.role = role;
+        user.status = "active";
+        await userRepo.save(user);
+        return res.status(201).json({ message: "Admin user created successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to create user", error: err.message });
+    }
+});
+// ============================================================
+// 5. EXECUTIVE COUNCIL CRUD & REORDER
+// ============================================================
 router.post("/council", upload.single("photo"), async (req, res) => {
     try {
-        const { name, designation, institution, email, phone, year } = req.body;
+        const { name, designation, institution, email, phone, year, memberType } = req.body;
         let photoUrl = null;
-        if (req.file) {
+        if (req.file)
             photoUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "executive_council");
-        }
         const councilRepo = db_1.AppDataSource.getRepository(ExecutiveCouncilMember_1.ExecutiveCouncilMember);
-        // Auto increment order
         const maxOrder = await councilRepo.maximum("displayOrder") || 0;
         const council = new ExecutiveCouncilMember_1.ExecutiveCouncilMember();
         council.name = name;
@@ -179,6 +329,7 @@ router.post("/council", upload.single("photo"), async (req, res) => {
         council.photoUrl = photoUrl;
         council.displayOrder = maxOrder + 1;
         council.year = year || "2026";
+        council.memberType = memberType || "Executive Council Members";
         await councilRepo.save(council);
         return res.status(201).json({ message: "Council member added successfully", council });
     }
@@ -192,7 +343,7 @@ router.put("/council/:id", upload.single("photo"), async (req, res) => {
         const council = await councilRepo.findOneBy({ id: parseInt(req.params.id) });
         if (!council)
             return res.status(404).json({ message: "Member not found" });
-        const { name, designation, institution, email, phone, year, displayOrder } = req.body;
+        const { name, designation, institution, email, phone, year, displayOrder, memberType } = req.body;
         if (name)
             council.name = name;
         if (designation)
@@ -207,9 +358,10 @@ router.put("/council/:id", upload.single("photo"), async (req, res) => {
             council.year = year;
         if (displayOrder !== undefined)
             council.displayOrder = parseInt(displayOrder);
-        if (req.file) {
+        if (memberType)
+            council.memberType = memberType;
+        if (req.file)
             council.photoUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "executive_council");
-        }
         await councilRepo.save(council);
         return res.json({ message: "Council member updated successfully", council });
     }
@@ -229,10 +381,9 @@ router.delete("/council/:id", async (req, res) => {
 });
 router.post("/council/reorder", async (req, res) => {
     try {
-        const { orderList } = req.body; // array of { id: number, displayOrder: number }
-        if (!Array.isArray(orderList)) {
+        const { orderList } = req.body;
+        if (!Array.isArray(orderList))
             return res.status(400).json({ message: "Invalid order list format" });
-        }
         const councilRepo = db_1.AppDataSource.getRepository(ExecutiveCouncilMember_1.ExecutiveCouncilMember);
         for (const item of orderList) {
             await councilRepo.update(item.id, { displayOrder: item.displayOrder });
@@ -243,7 +394,22 @@ router.post("/council/reorder", async (req, res) => {
         return res.status(500).json({ message: "Failed to reorder council members" });
     }
 });
-// 4. PUBLICATIONS CRUD
+// ============================================================
+// 6. PUBLICATIONS CRUD
+// ============================================================
+router.get("/publications", async (req, res) => {
+    try {
+        const pubRepo = db_1.AppDataSource.getRepository(Publication_1.Publication);
+        const pubs = await pubRepo.find({
+            relations: ["category"],
+            order: { createdAt: "DESC" }
+        });
+        return res.json(pubs);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch publications", error: err.message });
+    }
+});
 router.post("/publications", upload.single("file"), async (req, res) => {
     try {
         const { title, description, categoryId } = req.body;
@@ -266,7 +432,6 @@ router.post("/publications", upload.single("file"), async (req, res) => {
         return res.status(201).json({ message: "Publication uploaded successfully", pub });
     }
     catch (err) {
-        console.error("Publication upload error:", err);
         return res.status(500).json({ message: "Upload failed", error: err.message });
     }
 });
@@ -280,13 +445,34 @@ router.delete("/publications/:id", async (req, res) => {
         return res.status(500).json({ message: "Failed to delete publication" });
     }
 });
-// 5. NEWS CRUD
-router.post("/news", upload.single("image"), async (req, res) => {
+// ============================================================
+// 7. NEWS CRUD
+// ============================================================
+router.get("/news", async (req, res) => {
+    try {
+        const newsRepo = db_1.AppDataSource.getRepository(News_1.News);
+        const news = await newsRepo.find({ order: { createdAt: "DESC" } });
+        return res.json(news);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch news", error: err.message });
+    }
+});
+router.post("/news", upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "attachment", maxCount: 1 }
+]), async (req, res) => {
     try {
         const { title, description, content } = req.body;
         let imageUrl = null;
-        if (req.file) {
-            imageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "news");
+        let attachmentUrl = null;
+        if (req.files) {
+            if (req.files.image) {
+                imageUrl = await uploadService_1.uploadService.uploadFile(req.files.image[0].path, "news");
+            }
+            if (req.files.attachment) {
+                attachmentUrl = await uploadService_1.uploadService.uploadFile(req.files.attachment[0].path, "news_attachments");
+            }
         }
         const newsRepo = db_1.AppDataSource.getRepository(News_1.News);
         const news = new News_1.News();
@@ -294,6 +480,7 @@ router.post("/news", upload.single("image"), async (req, res) => {
         news.description = description || null;
         news.content = content;
         news.imageUrl = imageUrl;
+        news.attachmentUrl = attachmentUrl;
         await newsRepo.save(news);
         return res.status(201).json({ message: "News bulletin created successfully", news });
     }
@@ -301,7 +488,10 @@ router.post("/news", upload.single("image"), async (req, res) => {
         return res.status(500).json({ message: "Failed to create news bulletin", error: err.message });
     }
 });
-router.put("/news/:id", upload.single("image"), async (req, res) => {
+router.put("/news/:id", upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "attachment", maxCount: 1 }
+]), async (req, res) => {
     try {
         const newsRepo = db_1.AppDataSource.getRepository(News_1.News);
         const news = await newsRepo.findOneBy({ id: req.params.id });
@@ -314,14 +504,19 @@ router.put("/news/:id", upload.single("image"), async (req, res) => {
             news.description = description;
         if (content)
             news.content = content;
-        if (req.file) {
-            news.imageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "news");
+        if (req.files) {
+            if (req.files.image) {
+                news.imageUrl = await uploadService_1.uploadService.uploadFile(req.files.image[0].path, "news");
+            }
+            if (req.files.attachment) {
+                news.attachmentUrl = await uploadService_1.uploadService.uploadFile(req.files.attachment[0].path, "news_attachments");
+            }
         }
         await newsRepo.save(news);
         return res.json({ message: "News post updated successfully", news });
     }
     catch (err) {
-        return res.status(500).json({ message: "Failed to update news post" });
+        return res.status(500).json({ message: "Failed to update news post", error: err.message });
     }
 });
 router.delete("/news/:id", async (req, res) => {
@@ -334,14 +529,25 @@ router.delete("/news/:id", async (req, res) => {
         return res.status(500).json({ message: "Failed to delete news post" });
     }
 });
-// 6. EVENTS CRUD
+// ============================================================
+// 8. EVENTS CRUD
+// ============================================================
+router.get("/events", async (req, res) => {
+    try {
+        const eventRepo = db_1.AppDataSource.getRepository(Event_1.Event);
+        const events = await eventRepo.find({ order: { createdAt: "DESC" } });
+        return res.json(events);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch events", error: err.message });
+    }
+});
 router.post("/events", upload.single("banner"), async (req, res) => {
     try {
         const { title, description, content, startDate, endDate, registrationDeadline, eventType, venueDetails, registrationLink, scheduleDetails } = req.body;
         let bannerUrl = null;
-        if (req.file) {
+        if (req.file)
             bannerUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "events");
-        }
         const eventRepo = db_1.AppDataSource.getRepository(Event_1.Event);
         const event = new Event_1.Event();
         event.title = title;
@@ -364,6 +570,40 @@ router.post("/events", upload.single("banner"), async (req, res) => {
         return res.status(500).json({ message: "Failed to create event", error: err.message });
     }
 });
+router.put("/events/:id", upload.single("banner"), async (req, res) => {
+    try {
+        const eventRepo = db_1.AppDataSource.getRepository(Event_1.Event);
+        const event = await eventRepo.findOneBy({ id: req.params.id });
+        if (!event)
+            return res.status(404).json({ message: "Event not found" });
+        const { title, description, content, startDate, endDate, registrationDeadline, eventType, venueDetails, registrationLink } = req.body;
+        if (title)
+            event.title = title;
+        if (description !== undefined)
+            event.description = description;
+        if (content)
+            event.content = content;
+        if (startDate)
+            event.startDate = new Date(startDate);
+        if (endDate)
+            event.endDate = new Date(endDate);
+        if (registrationDeadline !== undefined)
+            event.registrationDeadline = registrationDeadline ? new Date(registrationDeadline) : null;
+        if (eventType)
+            event.eventType = eventType;
+        if (venueDetails !== undefined)
+            event.venueDetails = venueDetails;
+        if (registrationLink !== undefined)
+            event.registrationLink = registrationLink;
+        if (req.file)
+            event.bannerUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "events");
+        await eventRepo.save(event);
+        return res.json({ message: "Event updated successfully", event });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to update event", error: err.message });
+    }
+});
 router.delete("/events/:id", async (req, res) => {
     try {
         const eventRepo = db_1.AppDataSource.getRepository(Event_1.Event);
@@ -374,14 +614,28 @@ router.delete("/events/:id", async (req, res) => {
         return res.status(500).json({ message: "Failed to delete event" });
     }
 });
-// 7. GALLERY MANAGEMENT
+// ============================================================
+// 9. GALLERY MANAGEMENT
+// ============================================================
+router.get("/gallery", async (req, res) => {
+    try {
+        const albumRepo = db_1.AppDataSource.getRepository(GalleryAlbum_1.GalleryAlbum);
+        const albums = await albumRepo.find({
+            relations: ["images"],
+            order: { createdAt: "DESC" }
+        });
+        return res.json(albums);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch gallery albums", error: err.message });
+    }
+});
 router.post("/gallery/albums", upload.single("cover"), async (req, res) => {
     try {
         const { name, description } = req.body;
         let coverImageUrl = null;
-        if (req.file) {
+        if (req.file)
             coverImageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "gallery");
-        }
         const albumRepo = db_1.AppDataSource.getRepository(GalleryAlbum_1.GalleryAlbum);
         const album = new GalleryAlbum_1.GalleryAlbum();
         album.name = name;
@@ -392,6 +646,16 @@ router.post("/gallery/albums", upload.single("cover"), async (req, res) => {
     }
     catch (err) {
         return res.status(500).json({ message: "Failed to create gallery album" });
+    }
+});
+router.delete("/gallery/albums/:id", async (req, res) => {
+    try {
+        const albumRepo = db_1.AppDataSource.getRepository(GalleryAlbum_1.GalleryAlbum);
+        await albumRepo.delete({ id: req.params.id });
+        return res.json({ message: "Gallery album deleted successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to delete gallery album" });
     }
 });
 router.post("/gallery/albums/:id/photos", upload.single("photo"), async (req, res) => {
@@ -415,7 +679,88 @@ router.post("/gallery/albums/:id/photos", upload.single("photo"), async (req, re
         return res.status(500).json({ message: "Failed to add photo", error: err.message });
     }
 });
-// 8. CONTACT MESSAGES MANAGER
+router.delete("/gallery/photos/:id", async (req, res) => {
+    try {
+        const photoRepo = db_1.AppDataSource.getRepository(GalleryImage_1.GalleryImage);
+        await photoRepo.delete({ id: req.params.id });
+        return res.json({ message: "Photo deleted successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to delete photo" });
+    }
+});
+// ============================================================
+// 10. ACHIEVEMENTS CRUD
+// ============================================================
+router.get("/achievements", async (req, res) => {
+    try {
+        const achRepo = db_1.AppDataSource.getRepository(Achievement_1.Achievement);
+        const achievements = await achRepo.find({ order: { createdAt: "DESC" } });
+        return res.json(achievements);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch achievements", error: err.message });
+    }
+});
+router.post("/achievements", upload.single("image"), async (req, res) => {
+    try {
+        const { title, description, date, category } = req.body;
+        if (!title || !description)
+            return res.status(400).json({ message: "Title and description are required" });
+        let imageUrl = null;
+        if (req.file)
+            imageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "achievements");
+        const achRepo = db_1.AppDataSource.getRepository(Achievement_1.Achievement);
+        const achievement = new Achievement_1.Achievement();
+        achievement.title = title;
+        achievement.description = description;
+        achievement.date = date || null;
+        achievement.category = category || "Milestones";
+        achievement.imageUrl = imageUrl;
+        await achRepo.save(achievement);
+        return res.status(201).json({ message: "Achievement added successfully", achievement });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to add achievement", error: err.message });
+    }
+});
+router.put("/achievements/:id", upload.single("image"), async (req, res) => {
+    try {
+        const achRepo = db_1.AppDataSource.getRepository(Achievement_1.Achievement);
+        const achievement = await achRepo.findOneBy({ id: req.params.id });
+        if (!achievement)
+            return res.status(404).json({ message: "Achievement not found" });
+        const { title, description, date, category } = req.body;
+        if (title)
+            achievement.title = title;
+        if (description)
+            achievement.description = description;
+        if (date !== undefined)
+            achievement.date = date;
+        if (category)
+            achievement.category = category;
+        if (req.file)
+            achievement.imageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "achievements");
+        await achRepo.save(achievement);
+        return res.json({ message: "Achievement updated successfully", achievement });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to update achievement", error: err.message });
+    }
+});
+router.delete("/achievements/:id", async (req, res) => {
+    try {
+        const achRepo = db_1.AppDataSource.getRepository(Achievement_1.Achievement);
+        await achRepo.delete({ id: req.params.id });
+        return res.json({ message: "Achievement deleted successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to delete achievement" });
+    }
+});
+// ============================================================
+// 11. CONTACT MESSAGES MANAGER
+// ============================================================
 router.get("/contacts", async (req, res) => {
     try {
         const msgRepo = db_1.AppDataSource.getRepository(ContactMessage_1.ContactMessage);
@@ -424,6 +769,20 @@ router.get("/contacts", async (req, res) => {
     }
     catch (err) {
         return res.status(500).json({ message: "Failed to fetch contact inquiries" });
+    }
+});
+router.put("/contacts/:id/read", async (req, res) => {
+    try {
+        const msgRepo = db_1.AppDataSource.getRepository(ContactMessage_1.ContactMessage);
+        const msg = await msgRepo.findOneBy({ id: req.params.id });
+        if (!msg)
+            return res.status(404).json({ message: "Message not found" });
+        msg.status = "read";
+        await msgRepo.save(msg);
+        return res.json({ message: "Message marked as read" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to mark message as read" });
     }
 });
 router.post("/contacts/:id/reply", async (req, res) => {
@@ -435,9 +794,7 @@ router.post("/contacts/:id/reply", async (req, res) => {
         const msg = await msgRepo.findOneBy({ id: req.params.id });
         if (!msg)
             return res.status(404).json({ message: "Inquiry not found" });
-        // Send reply via mock/smtp service
-        const subject = `Re: ${msg.subject}`;
-        await emailService_1.emailService.sendPasswordReset(msg.email, `Custom reply context: ${replyContent}`); // Using nodemailer logic
+        await emailService_1.emailService.sendPasswordReset(msg.email, `Custom reply context: ${replyContent}`);
         msg.status = "replied";
         msg.adminReply = replyContent;
         msg.repliedAt = new Date();
@@ -448,11 +805,23 @@ router.post("/contacts/:id/reply", async (req, res) => {
         return res.status(500).json({ message: "Failed to send reply to contact", error: err.message });
     }
 });
-// 9. WEBSITE SETTINGS UPDATE
+router.delete("/contacts/:id", async (req, res) => {
+    try {
+        const msgRepo = db_1.AppDataSource.getRepository(ContactMessage_1.ContactMessage);
+        await msgRepo.delete({ id: req.params.id });
+        return res.json({ message: "Contact message deleted successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to delete contact message" });
+    }
+});
+// ============================================================
+// 12. WEBSITE SETTINGS
+// ============================================================
 router.put("/settings", async (req, res) => {
     try {
         const settingRepo = db_1.AppDataSource.getRepository(WebsiteSetting_1.WebsiteSetting);
-        const payload = req.body; // e.g. { about_origin: 'new text', contact_phone: '+91...' }
+        const payload = req.body;
         for (const key of Object.keys(payload)) {
             let setting = await settingRepo.findOneBy({ key });
             if (setting) {
@@ -470,6 +839,94 @@ router.put("/settings", async (req, res) => {
     }
     catch (err) {
         return res.status(500).json({ message: "Failed to update configurations", error: err.message });
+    }
+});
+// ============================================================
+// 13. CAROUSEL SLIDE MANAGEMENT
+// ============================================================
+router.get("/carousel", async (req, res) => {
+    try {
+        const slideRepo = db_1.AppDataSource.getRepository(CarouselSlide_1.CarouselSlide);
+        const slides = await slideRepo.find({ order: { displayOrder: "ASC" } });
+        return res.json(slides);
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to fetch carousel slides", error: err.message });
+    }
+});
+router.post("/carousel", upload.single("image"), async (req, res) => {
+    try {
+        const { title, subtitle, buttonLabel, buttonLink, displayOrder, isActive } = req.body;
+        if (!req.file)
+            return res.status(400).json({ message: "Slide image is required" });
+        const imageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "carousel");
+        const slideRepo = db_1.AppDataSource.getRepository(CarouselSlide_1.CarouselSlide);
+        const maxOrder = await slideRepo.maximum("displayOrder") || 0;
+        const slide = new CarouselSlide_1.CarouselSlide();
+        slide.imageUrl = imageUrl;
+        slide.title = title || null;
+        slide.subtitle = subtitle || null;
+        slide.buttonLabel = buttonLabel || null;
+        slide.buttonLink = buttonLink || null;
+        slide.displayOrder = displayOrder !== undefined ? parseInt(displayOrder) : maxOrder + 1;
+        slide.isActive = isActive !== undefined ? isActive === "true" || isActive === true : true;
+        await slideRepo.save(slide);
+        return res.status(201).json({ message: "Carousel slide created successfully", slide });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to create carousel slide", error: err.message });
+    }
+});
+router.put("/carousel/:id", upload.single("image"), async (req, res) => {
+    try {
+        const slideRepo = db_1.AppDataSource.getRepository(CarouselSlide_1.CarouselSlide);
+        const slide = await slideRepo.findOneBy({ id: parseInt(req.params.id) });
+        if (!slide)
+            return res.status(404).json({ message: "Carousel slide not found" });
+        const { title, subtitle, buttonLabel, buttonLink, displayOrder, isActive } = req.body;
+        slide.title = title || null;
+        if (subtitle !== undefined)
+            slide.subtitle = subtitle || null;
+        if (buttonLabel !== undefined)
+            slide.buttonLabel = buttonLabel || null;
+        if (buttonLink !== undefined)
+            slide.buttonLink = buttonLink || null;
+        if (displayOrder !== undefined)
+            slide.displayOrder = parseInt(displayOrder);
+        if (isActive !== undefined)
+            slide.isActive = isActive === "true" || isActive === true;
+        if (req.file)
+            slide.imageUrl = await uploadService_1.uploadService.uploadFile(req.file.path, "carousel");
+        await slideRepo.save(slide);
+        return res.json({ message: "Carousel slide updated successfully", slide });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to update carousel slide", error: err.message });
+    }
+});
+router.delete("/carousel/:id", async (req, res) => {
+    try {
+        const slideRepo = db_1.AppDataSource.getRepository(CarouselSlide_1.CarouselSlide);
+        await slideRepo.delete({ id: parseInt(req.params.id) });
+        return res.json({ message: "Carousel slide deleted successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to delete carousel slide" });
+    }
+});
+router.post("/carousel/reorder", async (req, res) => {
+    try {
+        const { orderList } = req.body;
+        if (!Array.isArray(orderList))
+            return res.status(400).json({ message: "Invalid order list" });
+        const slideRepo = db_1.AppDataSource.getRepository(CarouselSlide_1.CarouselSlide);
+        for (const item of orderList) {
+            await slideRepo.update(item.id, { displayOrder: item.displayOrder });
+        }
+        return res.json({ message: "Carousel reordered successfully" });
+    }
+    catch (err) {
+        return res.status(500).json({ message: "Failed to reorder carousel slides" });
     }
 });
 exports.default = router;
