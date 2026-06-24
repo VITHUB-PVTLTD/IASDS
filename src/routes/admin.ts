@@ -5,6 +5,9 @@ import { AppDataSource } from "../config/db";
 import { User } from "../entities/User";
 import { Role } from "../entities/Role";
 import { Member } from "../entities/Member";
+import { MemberProfile } from "../entities/MemberProfile";
+import { MembershipPayment } from "../entities/MembershipPayment";
+import { MembershipCard } from "../entities/MembershipCard";
 import { MembershipApplication } from "../entities/MembershipApplication";
 import { ExecutiveCouncilMember } from "../entities/ExecutiveCouncilMember";
 import { Publication } from "../entities/Publication";
@@ -261,6 +264,70 @@ router.put("/members/:id/status", async (req, res) => {
     return res.json({ message: "Member status updated successfully", member });
   } catch (err: any) {
     return res.status(500).json({ message: "Failed to update member status", error: err.message });
+  }
+});
+
+// DELETE member profile completely — Super Admin only
+// Deletes the Member + all related rows + the User account,
+// freeing the email so the user can register fresh and re-apply.
+router.delete("/members/:id", requireRole(["Super Admin"]) as any, async (req: AuthenticatedRequest, res: Response) => {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+  try {
+    const memberRepo     = queryRunner.manager.getRepository(Member);
+    const profileRepo    = queryRunner.manager.getRepository(MemberProfile);
+    const paymentRepo    = queryRunner.manager.getRepository(MembershipPayment);
+    const cardRepo       = queryRunner.manager.getRepository(MembershipCard);
+    const appRepo        = queryRunner.manager.getRepository(MembershipApplication);
+    const userRepo       = queryRunner.manager.getRepository(User);
+
+    const member = await memberRepo.findOne({
+      where: { id: req.params.id },
+      relations: ["user", "profile"]
+    });
+    if (!member) return res.status(404).json({ message: "Member not found" });
+
+    // Only allow deletion of rejected or suspended profiles
+    if (!["rejected", "suspended"].includes(member.status)) {
+      return res.status(400).json({
+        message: "Only rejected or suspended member profiles can be deleted to allow re-application."
+      });
+    }
+
+    const memberId = member.id;
+    const userId = member.user.id;
+
+    // Step 1 — Delete all membership_cards referencing this member (FK: member_id)
+    await cardRepo.delete({ member: { id: memberId } });
+
+    // Step 2 — Delete all membership_payments referencing this member (FK: member_id)
+    await paymentRepo.delete({ member: { id: memberId } });
+
+    // Step 3 — Delete the member_profile referencing this member (FK: member_id)
+    if (member.profile) {
+      await profileRepo.delete({ id: member.profile.id });
+    }
+
+    // Step 4 — Delete the member row itself
+    await memberRepo.delete({ id: memberId });
+
+    // Step 5 — Delete all membership_applications for this user (FK: user_id)
+    await appRepo.delete({ user: { id: userId } });
+
+    // Step 6 — Delete the User account completely.
+    // This frees the email address so the person can re-register from scratch.
+    // Notifications are cascaded at DB level (ON DELETE CASCADE on user FK).
+    await userRepo.delete({ id: userId });
+
+    await queryRunner.commitTransaction();
+    return res.json({ message: "Member profile and account deleted. The user can now re-register with the same email." });
+  } catch (err: any) {
+    await queryRunner.rollbackTransaction();
+    console.error("Delete member profile error:", err);
+    return res.status(500).json({ message: "Failed to delete member profile", error: err.message });
+  } finally {
+    await queryRunner.release();
   }
 });
 
