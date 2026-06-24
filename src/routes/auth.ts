@@ -20,6 +20,7 @@ function fileToBase64DataUri(filePath: string, originalName: string): string {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
     gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
     bmp: "image/bmp", ico: "image/x-icon",
+    pdf: "application/pdf",
   };
   const ext = (originalName.split(".").pop() || "jpeg").toLowerCase();
   const mime = extMap[ext] || "image/jpeg";
@@ -98,11 +99,11 @@ router.post(
         profilePhotoUrl = fileToBase64DataUri(photoFile.path, photoFile.originalname || photoFile.filename);
       }
 
-      // Upload supporting documents (may be PDF - use uploadService)
+      // Convert supporting document (image or PDF) to base64 data URI for DB storage
       let supportingDocsUrl: string | null = null;
       if (req.files && req.files.supportingDocument) {
         const docFile = req.files.supportingDocument[0];
-        supportingDocsUrl = await uploadService.uploadFile(docFile.path, "supporting_documents");
+        supportingDocsUrl = fileToBase64DataUri(docFile.path, docFile.originalname || docFile.filename);
       }
 
       // Get standard Member Role

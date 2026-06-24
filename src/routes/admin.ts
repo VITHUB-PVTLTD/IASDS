@@ -34,6 +34,7 @@ function fileToBase64DataUri(filePath: string, originalName: string): string {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
     gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
     bmp: "image/bmp", ico: "image/x-icon",
+    pdf: "application/pdf",
   };
   const ext = (originalName.split(".").pop() || "jpeg").toLowerCase();
   const mime = extMap[ext] || "image/jpeg";
