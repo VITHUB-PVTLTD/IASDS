@@ -41,7 +41,7 @@ async function logEmail(toEmail: string, subject: string, templateName: string, 
 }
 
 async function sendMail(to: string, subject: string, html: string, templateName: string) {
-  const sender = process.env.SMTP_FROM || "no-reply@iasds.org";
+  const sender = process.env.SMTP_FROM || "contact@iasds.org.in";
   
   if (useRealMail && transporter) {
     try {
@@ -109,7 +109,7 @@ export const emailService = {
         <p>Thank you for your interest in the <strong>Indian Association of Statistics & Data Science (IASDS)</strong>.</p>
         <p>After reviewing your application details, we regret to inform you that we are unable to approve your membership at this time for the following reason:</p>
         <blockquote style="background: #F3F4F6; padding: 10px; border-left: 4px solid #EF4444; margin: 10px 0;">${reason}</blockquote>
-        <p>If you believe there has been a mistake or wish to provide supplementary documents, please contact us at support@iasds.org.</p>
+        <p>If you believe there has been a mistake or wish to provide supplementary documents, please contact us at <a href="mailto:contact@iasds.org.in">contact@iasds.org.in</a>.</p>
         <p>Best regards,<br>Review Board, IASDS</p>
       </div>
     `;
@@ -155,11 +155,40 @@ export const emailService = {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
         <h2 style="color: #0D5C99;">Inquiry Received</h2>
         <p>Dear ${name},</p>
-        <p>Thank you for reaching out to the <strong>Indian Association of Statistics & Data Science (IASDS)</strong> regarding "<em>${formSubject}</em>".</p>
-        <p>Our representative will review your query and respond as soon as possible.</p>
+        <p>Thank you for reaching out to the <strong>Indian Association of Statistics &amp; Data Science (IASDS)</strong> regarding "<em>${formSubject}</em>".</p>
+        <p>Our representative will review your query and respond as soon as possible. You may also reach us directly at <a href="mailto:contact@iasds.org.in">contact@iasds.org.in</a>.</p>
         <p>Best regards,<br>Office Staff, IASDS</p>
       </div>
     `;
     await sendMail(email, subject, html, "contact_submitted");
+  },
+
+  // Notify IASDS office about a new contact form submission
+  async sendContactFormNotification(
+    senderName: string,
+    senderEmail: string,
+    senderPhone: string | null,
+    formSubject: string,
+    formMessage: string
+  ) {
+    const contactEmail = process.env.CONTACT_EMAIL || "contact@iasds.org.in";
+    const subject = `[Contact Form] ${formSubject}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0;">
+        <h2 style="color: #0D5C99; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">New Contact Form Submission</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 6px 0; font-weight: bold; color: #555; width: 120px;">Name:</td><td style="padding: 6px 0;">${senderName}</td></tr>
+          <tr><td style="padding: 6px 0; font-weight: bold; color: #555;">Email:</td><td style="padding: 6px 0;"><a href="mailto:${senderEmail}">${senderEmail}</a></td></tr>
+          <tr><td style="padding: 6px 0; font-weight: bold; color: #555;">Phone:</td><td style="padding: 6px 0;">${senderPhone || "Not provided"}</td></tr>
+          <tr><td style="padding: 6px 0; font-weight: bold; color: #555;">Subject:</td><td style="padding: 6px 0;">${formSubject}</td></tr>
+        </table>
+        <div style="background: #F8FAFC; border-left: 4px solid #0D5C99; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-weight: bold; color: #555; margin-bottom: 8px;">Message:</p>
+          <p style="margin: 0; white-space: pre-wrap; color: #333;">${formMessage}</p>
+        </div>
+        <p style="color: #888; font-size: 12px; margin-top: 20px;">This email was auto-generated from the IASDS website contact form.</p>
+      </div>
+    `;
+    await sendMail(contactEmail, subject, html, "contact_notification");
   }
 };

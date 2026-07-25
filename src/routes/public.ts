@@ -209,8 +209,11 @@ router.post("/contact", async (req, res) => {
     msg.message = message;
     await msgRepo.save(msg);
 
-    // Send acknowledgement email
+    // Send acknowledgement email to the person who submitted the form
     await emailService.sendContactFormSubmission(email, name, subject);
+
+    // Forward the message to the IASDS contact inbox
+    await emailService.sendContactFormNotification(name, email, phone || null, subject, message);
 
     return res.status(201).json({ message: "Thank you for contacting us. Your message has been received." });
   } catch (err: any) {
