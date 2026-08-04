@@ -39,5 +39,8 @@ export class ExecutiveCouncilMember {
     default: "Executive Council Members",
   })
   memberType!: CouncilMemberType;
+
+  @Column({ name: "portfolio_url", nullable: true, type: "text" })
+  portfolioUrl!: string | null;
 }
 

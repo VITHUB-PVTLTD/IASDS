@@ -421,11 +421,35 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
 // ============================================================
 // 5. EXECUTIVE COUNCIL CRUD & REORDER
 // ============================================================
-router.post("/council", upload.single("photo"), async (req: any, res: Response) => {
+router.post("/council", upload.fields([
+  { name: "photo", maxCount: 1 },
+  { name: "portfolio", maxCount: 1 },
+]), async (req: any, res: Response) => {
   try {
     const { name, designation, institution, email, phone, year, memberType } = req.body;
     let photoUrl: string | null = null;
-    if (req.file) photoUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    let portfolioUrl: string | null = null;
+
+    if (req.files) {
+      if (req.files.photo) {
+        const photoFile = req.files.photo[0];
+        photoUrl = fileToBase64DataUri(photoFile.path, photoFile.originalname || photoFile.filename);
+      }
+      if (req.files.portfolio) {
+        const pdfFile = req.files.portfolio[0];
+        // Validate: PDF only
+        if (pdfFile.mimetype !== "application/pdf") {
+          if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
+          return res.status(400).json({ message: "Only PDF files are allowed" });
+        }
+        // Validate: max 5 MB
+        if (pdfFile.size > 5 * 1024 * 1024) {
+          if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
+          return res.status(400).json({ message: "Portfolio file size should not exceed 5MB" });
+        }
+        portfolioUrl = fileToBase64DataUri(pdfFile.path, pdfFile.originalname || pdfFile.filename);
+      }
+    }
 
     const councilRepo = AppDataSource.getRepository(ExecutiveCouncilMember);
     const maxOrder = await councilRepo.maximum("displayOrder") || 0;
@@ -437,6 +461,7 @@ router.post("/council", upload.single("photo"), async (req: any, res: Response) 
     council.email = email || null;
     council.phoneNumber = phone || null;
     council.photoUrl = photoUrl;
+    council.portfolioUrl = portfolioUrl;
     council.displayOrder = maxOrder + 1;
     council.year = year || "2026";
     council.memberType = memberType || "Executive Council Members";
@@ -448,13 +473,16 @@ router.post("/council", upload.single("photo"), async (req: any, res: Response) 
   }
 });
 
-router.put("/council/:id", upload.single("photo"), async (req: any, res: Response) => {
+router.put("/council/:id", upload.fields([
+  { name: "photo", maxCount: 1 },
+  { name: "portfolio", maxCount: 1 },
+]), async (req: any, res: Response) => {
   try {
     const councilRepo = AppDataSource.getRepository(ExecutiveCouncilMember);
     const council = await councilRepo.findOneBy({ id: parseInt(req.params.id) });
     if (!council) return res.status(404).json({ message: "Member not found" });
 
-    const { name, designation, institution, email, phone, year, displayOrder, memberType } = req.body;
+    const { name, designation, institution, email, phone, year, displayOrder, memberType, removePortfolio } = req.body;
     if (name) council.name = name;
     if (designation) council.designation = designation;
     if (institution) council.institution = institution;
@@ -463,7 +491,30 @@ router.put("/council/:id", upload.single("photo"), async (req: any, res: Respons
     if (year) council.year = year;
     if (displayOrder !== undefined) council.displayOrder = parseInt(displayOrder);
     if (memberType) council.memberType = memberType;
-    if (req.file) council.photoUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+
+    if (req.files) {
+      if ((req.files as any).photo) {
+        const photoFile = (req.files as any).photo[0];
+        council.photoUrl = fileToBase64DataUri(photoFile.path, photoFile.originalname || photoFile.filename);
+      }
+      if ((req.files as any).portfolio) {
+        const pdfFile = (req.files as any).portfolio[0];
+        // Validate: PDF only
+        if (pdfFile.mimetype !== "application/pdf") {
+          if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
+          return res.status(400).json({ message: "Only PDF files are allowed" });
+        }
+        // Validate: max 5 MB
+        if (pdfFile.size > 5 * 1024 * 1024) {
+          if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
+          return res.status(400).json({ message: "Portfolio file size should not exceed 5MB" });
+        }
+        council.portfolioUrl = fileToBase64DataUri(pdfFile.path, pdfFile.originalname || pdfFile.filename);
+      }
+    }
+
+    // Allow admin to explicitly clear the portfolio
+    if (removePortfolio === "true") council.portfolioUrl = null;
 
     await councilRepo.save(council);
     return res.json({ message: "Council member updated successfully", council });
