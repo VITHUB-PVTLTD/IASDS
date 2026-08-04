@@ -13,6 +13,7 @@ import { HonorsAwards } from "../entities/HonorsAwards";
 import { ContactMessage } from "../entities/ContactMessage";
 import { Member } from "../entities/Member";
 import { CarouselSlide } from "../entities/CarouselSlide";
+import { WhatsAppPost } from "../entities/WhatsAppPost";
 import { Like, MoreThanOrEqual, LessThan } from "typeorm";
 import { emailService } from "../services/emailService";
 
@@ -318,6 +319,17 @@ router.get("/carousel", async (req, res) => {
     return res.json(slides);
   } catch (err: any) {
     return res.status(500).json({ message: "Failed to fetch carousel slides", error: err.message });
+  }
+});
+
+// 14. GET WHATSAPP DISCUSSION FORUM POSTS
+router.get("/whatsapp-posts", async (req, res) => {
+  try {
+    const repo = AppDataSource.getRepository(WhatsAppPost);
+    const posts = await repo.find({ order: { postDate: "DESC", createdAt: "DESC" } });
+    return res.json(posts);
+  } catch (err: any) {
+    return res.status(500).json({ message: "Failed to fetch WhatsApp forum posts", error: err.message });
   }
 });
 

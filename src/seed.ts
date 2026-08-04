@@ -52,7 +52,7 @@ async function seed() {
 
     // 2. Seed Super Admin User
     console.log("Seeding Super Admin...");
-    const adminEmail = "admin@iasds.org";
+    const adminEmail = "admin@iasds.org.in";
     let adminUser = await userRepo.findOneBy({ email: adminEmail });
     if (!adminUser) {
       adminUser = new User();

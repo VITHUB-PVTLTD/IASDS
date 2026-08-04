@@ -25,6 +25,7 @@ import { WebsiteSetting } from "../entities/WebsiteSetting";
 import { SocialLink } from "../entities/SocialLink";
 import { AuditLog } from "../entities/AuditLog";
 import { CarouselSlide } from "../entities/CarouselSlide";
+import { WhatsAppPost } from "../entities/WhatsAppPost";
 
 dotenv.config();
 
@@ -65,7 +66,8 @@ export const AppDataSource = new DataSource({
     WebsiteSetting,
     SocialLink,
     AuditLog,
-    CarouselSlide
+    CarouselSlide,
+    WhatsAppPost
   ],
   subscribers: [],
   migrations: [],

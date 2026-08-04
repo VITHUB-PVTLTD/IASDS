@@ -23,6 +23,7 @@ import { ContactMessage } from "../entities/ContactMessage";
 import { WebsiteSetting } from "../entities/WebsiteSetting";
 import { Notification } from "../entities/Notification";
 import { CarouselSlide } from "../entities/CarouselSlide";
+import { WhatsAppPost } from "../entities/WhatsAppPost";
 import { emailService } from "../services/emailService";
 import { uploadService } from "../services/uploadService";
 import multer from "multer";
@@ -1087,6 +1088,106 @@ router.post("/carousel/reorder", async (req, res) => {
     return res.json({ message: "Carousel reordered successfully" });
   } catch (err: any) {
     return res.status(500).json({ message: "Failed to reorder carousel slides" });
+  }
+});
+
+// ============================================================
+// 11. WHATSAPP DISCUSSION FORUM POSTS CRUD
+// ============================================================
+router.get("/whatsapp-posts", async (req, res) => {
+  try {
+    const repo = AppDataSource.getRepository(WhatsAppPost);
+    const posts = await repo.find({ order: { postDate: "DESC", createdAt: "DESC" } });
+    return res.json(posts);
+  } catch (err: any) {
+    return res.status(500).json({ message: "Failed to fetch WhatsApp posts", error: err.message });
+  }
+});
+
+router.post(
+  "/whatsapp-posts",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "file", maxCount: 1 }
+  ]),
+  async (req: any, res: Response) => {
+    try {
+      const { title, description, postDate } = req.body;
+      if (!title || !postDate) return res.status(400).json({ message: "Title and post date are required" });
+
+      let imageUrl: string | null = null;
+      let fileUrl: string | null = null;
+
+      if (req.files) {
+        if (req.files.image) {
+          const imgFile = req.files.image[0];
+          imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
+        }
+        if (req.files.file) {
+          const attachFile = req.files.file[0];
+          fileUrl = fileToBase64DataUri(attachFile.path, attachFile.originalname || attachFile.filename);
+        }
+      }
+
+      const repo = AppDataSource.getRepository(WhatsAppPost);
+      const post = new WhatsAppPost();
+      post.title = title;
+      post.description = description || null;
+      post.postDate = postDate;
+      post.imageUrl = imageUrl;
+      post.fileUrl = fileUrl;
+      await repo.save(post);
+
+      return res.status(201).json({ message: "WhatsApp post created successfully", post });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to create WhatsApp post", error: err.message });
+    }
+  }
+);
+
+router.put(
+  "/whatsapp-posts/:id",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "file", maxCount: 1 }
+  ]),
+  async (req: any, res: Response) => {
+    try {
+      const repo = AppDataSource.getRepository(WhatsAppPost);
+      const post = await repo.findOneBy({ id: req.params.id });
+      if (!post) return res.status(404).json({ message: "WhatsApp post not found" });
+
+      const { title, description, postDate } = req.body;
+      if (title) post.title = title;
+      if (description !== undefined) post.description = description || null;
+      if (postDate) post.postDate = postDate;
+
+      if (req.files) {
+        if (req.files.image) {
+          const imgFile = req.files.image[0];
+          post.imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
+        }
+        if (req.files.file) {
+          const attachFile = req.files.file[0];
+          post.fileUrl = fileToBase64DataUri(attachFile.path, attachFile.originalname || attachFile.filename);
+        }
+      }
+
+      await repo.save(post);
+      return res.json({ message: "WhatsApp post updated successfully", post });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to update WhatsApp post", error: err.message });
+    }
+  }
+);
+
+router.delete("/whatsapp-posts/:id", async (req, res) => {
+  try {
+    const repo = AppDataSource.getRepository(WhatsAppPost);
+    await repo.delete({ id: req.params.id });
+    return res.json({ message: "WhatsApp post deleted successfully" });
+  } catch (err: any) {
+    return res.status(500).json({ message: "Failed to delete WhatsApp post" });
   }
 });
 
