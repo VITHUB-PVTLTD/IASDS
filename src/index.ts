@@ -18,7 +18,20 @@ const PORT = process.env.PORT || 5000;
 
 // Security Middlewares
 app.use(helmet({
-  crossOriginResourcePolicy: false, // Allows images hosted locally to be displayed by frontend
+  crossOriginResourcePolicy: false, // Allows images/files hosted locally to be loaded by frontend
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      // Allow data: URIs for base64-encoded images stored in the database
+      imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+      connectSrc: ["'self'", "https:", "http:"],
+      fontSrc: ["'self'", "https:", "data:"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'self'", "https:"],
+    },
+  },
 }));
 app.use(
   cors({
@@ -41,7 +54,9 @@ const limiter = rateLimit({
 app.use("/api/", limiter);
 
 // Serve static uploaded files (Profile photos, receipts, documents)
-app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
+// Resolve from process.cwd() so it works correctly in both dev (ts-node) and prod (compiled dist/)
+const uploadsDir = path.join(process.cwd(), "public", "uploads");
+app.use("/uploads", express.static(uploadsDir));
 
 // Mount REST APIs
 app.use("/api/auth", authRoutes);

@@ -33,24 +33,29 @@ import path from "path";
 import bcrypt from "bcryptjs";
 
 // Helper: convert a multer temp file to a base64 data URI and clean up the temp file
-function fileToBase64DataUri(filePath: string, originalName: string): string {
+function fileToBase64DataUri(fileBuffer: Buffer, originalName: string): string {
   const extMap: Record<string, string> = {
+    // Images
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
     gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
     bmp: "image/bmp", ico: "image/x-icon",
+    // Documents
     pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    odt: "application/vnd.oasis.opendocument.text",
+    txt: "text/plain",
   };
   const ext = (originalName.split(".").pop() || "jpeg").toLowerCase();
-  const mime = extMap[ext] || "image/jpeg";
-  const data = fs.readFileSync(filePath);
-  const base64 = data.toString("base64");
-  // Clean up temp file
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  const mime = extMap[ext] || "application/octet-stream";
+  const base64 = fileBuffer.toString("base64");
   return `data:${mime};base64,${base64}`;
 }
 
 const router = Router();
-const upload = multer({ dest: os.tmpdir() });
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Restrict all routes in this file to administrators/editors
 router.use(authenticateJWT as any);
@@ -434,7 +439,7 @@ router.post("/council", upload.fields([
     if (req.files) {
       if (req.files.photo) {
         const photoFile = req.files.photo[0];
-        photoUrl = fileToBase64DataUri(photoFile.path, photoFile.originalname || photoFile.filename);
+        photoUrl = fileToBase64DataUri(photoFile.buffer, photoFile.originalname || photoFile.filename);
       }
       if (req.files.portfolio) {
         const pdfFile = req.files.portfolio[0];
@@ -448,7 +453,7 @@ router.post("/council", upload.fields([
           if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
           return res.status(400).json({ message: "Portfolio file size should not exceed 5MB" });
         }
-        portfolioUrl = fileToBase64DataUri(pdfFile.path, pdfFile.originalname || pdfFile.filename);
+        portfolioUrl = fileToBase64DataUri(pdfFile.buffer, pdfFile.originalname || pdfFile.filename);
       }
     }
 
@@ -496,7 +501,7 @@ router.put("/council/:id", upload.fields([
     if (req.files) {
       if ((req.files as any).photo) {
         const photoFile = (req.files as any).photo[0];
-        council.photoUrl = fileToBase64DataUri(photoFile.path, photoFile.originalname || photoFile.filename);
+        council.photoUrl = fileToBase64DataUri(photoFile.buffer, photoFile.originalname || photoFile.filename);
       }
       if ((req.files as any).portfolio) {
         const pdfFile = (req.files as any).portfolio[0];
@@ -510,7 +515,7 @@ router.put("/council/:id", upload.fields([
           if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
           return res.status(400).json({ message: "Portfolio file size should not exceed 5MB" });
         }
-        council.portfolioUrl = fileToBase64DataUri(pdfFile.path, pdfFile.originalname || pdfFile.filename);
+        council.portfolioUrl = fileToBase64DataUri(pdfFile.buffer, pdfFile.originalname || pdfFile.filename);
       }
     }
 
@@ -634,7 +639,8 @@ router.post(
           imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
         }
         if (req.files.attachment) {
-          attachmentUrl = await uploadService.uploadFile(req.files.attachment[0].path, "news_attachments");
+          const attFile = req.files.attachment[0];
+          attachmentUrl = fileToBase64DataUri(attFile.buffer, attFile.originalname || attFile.filename);
         }
       }
 
@@ -674,10 +680,11 @@ router.put(
       if (req.files) {
         if (req.files.image) {
           const imgFile = req.files.image[0];
-          news.imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
+          news.imageUrl = fileToBase64DataUri(imgFile.buffer, imgFile.originalname || imgFile.filename);
         }
         if (req.files.attachment) {
-          news.attachmentUrl = await uploadService.uploadFile(req.files.attachment[0].path, "news_attachments");
+          const attFile = req.files.attachment[0];
+          news.attachmentUrl = fileToBase64DataUri(attFile.buffer, attFile.originalname || attFile.filename);
         }
       }
 
@@ -716,7 +723,7 @@ router.post("/events", upload.single("banner"), async (req: any, res: Response) 
   try {
     const { title, description, content, startDate, endDate, registrationDeadline, eventType, venueDetails, registrationLink, scheduleDetails } = req.body;
     let bannerUrl: string | null = null;
-    if (req.file) bannerUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    if (req.file) bannerUrl = fileToBase64DataUri(req.file.buffer, req.file.originalname || req.file.filename);
 
     const eventRepo = AppDataSource.getRepository(Event);
     const event = new Event();
@@ -757,7 +764,7 @@ router.put("/events/:id", upload.single("banner"), async (req: any, res: Respons
     if (eventType) event.eventType = eventType;
     if (venueDetails !== undefined) event.venueDetails = venueDetails;
     if (registrationLink !== undefined) event.registrationLink = registrationLink;
-    if (req.file) event.bannerUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    if (req.file) event.bannerUrl = fileToBase64DataUri(req.file.buffer, req.file.originalname || req.file.filename);
 
     await eventRepo.save(event);
     return res.json({ message: "Event updated successfully", event });
@@ -796,7 +803,7 @@ router.post("/gallery/albums", upload.single("cover"), async (req: any, res: Res
   try {
     const { name, description } = req.body;
     let coverImageUrl: string | null = null;
-    if (req.file) coverImageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    if (req.file) coverImageUrl = fileToBase64DataUri(req.file.buffer, req.file.originalname || req.file.filename);
 
     const albumRepo = AppDataSource.getRepository(GalleryAlbum);
     const album = new GalleryAlbum();
@@ -872,7 +879,7 @@ router.post("/achievements", upload.single("image"), async (req: any, res: Respo
     if (!title || !description) return res.status(400).json({ message: "Title and description are required" });
 
     let imageUrl: string | null = null;
-    if (req.file) imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    if (req.file) imageUrl = fileToBase64DataUri(req.file.buffer, req.file.originalname || req.file.filename);
 
     const achRepo = AppDataSource.getRepository(Achievement);
     const achievement = new Achievement();
@@ -900,7 +907,7 @@ router.put("/achievements/:id", upload.single("image"), async (req: any, res: Re
     if (description) achievement.description = description;
     if (date !== undefined) achievement.date = date;
     if (category) achievement.category = category;
-    if (req.file) achievement.imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    if (req.file) achievement.imageUrl = fileToBase64DataUri(req.file.buffer, req.file.originalname || req.file.filename);
 
     await achRepo.save(achievement);
     return res.json({ message: "Achievement updated successfully", achievement });
@@ -1058,7 +1065,7 @@ router.put("/carousel/:id", upload.single("image"), async (req: any, res: Respon
     if (displayOrder !== undefined) slide.displayOrder = parseInt(displayOrder);
     if (isActive !== undefined) slide.isActive = isActive === "true" || isActive === true;
     // If a new image is uploaded, convert it to Base64 data URI
-    if (req.file) slide.imageUrl = fileToBase64DataUri(req.file.path, req.file.originalname || req.file.filename);
+    if (req.file) slide.imageUrl = fileToBase64DataUri(req.file.buffer, req.file.originalname || req.file.filename);
 
     await slideRepo.save(slide);
     return res.json({ message: "Carousel slide updated successfully", slide });
@@ -1125,7 +1132,7 @@ router.post(
         }
         if (req.files.file) {
           const attachFile = req.files.file[0];
-          fileUrl = fileToBase64DataUri(attachFile.path, attachFile.originalname || attachFile.filename);
+          fileUrl = fileToBase64DataUri(attachFile.buffer, attachFile.originalname || attachFile.filename);
         }
       }
 
@@ -1165,11 +1172,11 @@ router.put(
       if (req.files) {
         if (req.files.image) {
           const imgFile = req.files.image[0];
-          post.imageUrl = fileToBase64DataUri(imgFile.path, imgFile.originalname || imgFile.filename);
+          post.imageUrl = fileToBase64DataUri(imgFile.buffer, imgFile.originalname || imgFile.filename);
         }
         if (req.files.file) {
           const attachFile = req.files.file[0];
-          post.fileUrl = fileToBase64DataUri(attachFile.path, attachFile.originalname || attachFile.filename);
+          post.fileUrl = fileToBase64DataUri(attachFile.buffer, attachFile.originalname || attachFile.filename);
         }
       }
 
